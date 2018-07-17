@@ -261,6 +261,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         kwargs["cb_str_passback"].emit("00:00:00.000")
         start_time = time.time()
         while True:
+            time.sleep(0.05)
             current_time = time.time()
             d_time = current_time - start_time
             kwargs["cb_str_passback"].emit(time.strftime(
@@ -359,21 +360,30 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
 
         recording = False   # Flag indicating when to use VideoWriter
         output = None
+        images = []
+        start_time = 0
 
         while cap.isOpened() and cam.name in self.view_dialogs.keys():
             ret, frame = cap.read()
 
             if ret:
 
+                time.sleep(0.01)
+
+                # Create copy to avoid saving overlaid frame
+                save_frame = frame.copy()
+
                 # Initialize VideoWriter if recording starts
                 if self.state == constants.STATE_MW_RUN \
                         and recording is False:
                     recording = True
-                    output = self._get_video_writer(cam)
+                    # output = self._get_video_writer(cam)
+                    start_time = time.time()
 
                 # Add frames if recording
-                if self.state == constants.STATE_MW_RUN and output != None:
-                    output.write(frame)
+                if self.state == constants.STATE_MW_RUN :#and output != None:
+                    images.append(save_frame)
+                    # output.write(frame)
 
                 # Add text overlay
                 if recording:
@@ -394,9 +404,18 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                                 )
 
                 # Release file if recording ends
-                if recording and self.state == constants.STATE_MW_IDLE\
-                        and output != None:
+                if recording and self.state == constants.STATE_MW_IDLE:#\
+                        #and output != None:
                     recording = False
+                    end_time = time.time()
+                    output = self._get_video_writer(
+                        cam,
+                        fps=float(len(images) / (end_time - start_time))
+                    )
+                    for image in images:
+                        time.sleep(0.01)
+                        output.write(image)
+
                     output.release()
 
                 kwargs["cb_obj_passback"].emit(cam, frame)
@@ -416,6 +435,9 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
 
         # Retrieve GenICam nodemap
         nodemap = flir_cam.GetNodeMap()
+
+        # Set FPS
+        # flir_cam.AcquisitionFrameRate.SetValue(constants.CAM_FPS)
 
         # Configure image events
         image_event_handler = flircam.ImageEventHandler(
@@ -439,12 +461,13 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         # Collect images as long as dialog is open
         while cam.name in self.view_dialogs.keys():
 
+            time.sleep(0.01)
             # Initialize VideoWriter if recording starts
             image_event_handler.rec_state = self.state
 
         # End collection and reset image events
-        if image_event_handler.output is not None:
-            image_event_handler.output.release()
+        """if image_event_handler.output is not None:
+            image_event_handler.output.release()"""
         flir_cam.EndAcquisition()
         flir_cam.UnregisterEvent(image_event_handler)
 
@@ -480,7 +503,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                     if match_str == cam_obj.link:
                         return flir_cam, cam_list, system
 
-    def _get_video_writer(self, cam):
+    def _get_video_writer(self, cam, fps=constants.CAM_FPS):
         # Generates VideoWriter object for saving camera feed frames
         fourcc = cv2.VideoWriter_fourcc(*'XVID')
         output_loc = self.leOutput.text()
@@ -495,12 +518,11 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                 constants.OUTPUT_FILE_EXT
             ),
             fourcc,
-            constants.CAM_FPS,
+            fps,
             (int(cam.resolution.split("x")[0]),
              int(cam.resolution.split("x")[1])),
             isColor=True
         )
-        print("VW")
         return output
 
     def _handle_video(self, media_obj, **kwargs):
@@ -514,6 +536,8 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         playing = True  # Flag indicating when the video is playing
 
         while kwargs["video_name"] in self.view_dialogs.keys():
+
+            time.sleep(0.01)
 
             # Stop playing if currently playing and state goes to idle
             if self.state == constants.STATE_MW_IDLE and playing:
@@ -784,6 +808,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
 
         else:
             worker = Worker(self._handle_cam, cam)
+
         worker.signals.obj_passback.connect(self._paint_cam_frame)
         self.threadpool.start(worker)
 
