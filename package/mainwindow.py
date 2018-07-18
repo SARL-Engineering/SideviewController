@@ -3,6 +3,7 @@ import ctypes
 import customdialog
 import cv2
 import flircam
+import frameprocessor
 import svdevices
 from threadworker import Worker
 from ui import mainwindow_ui
@@ -10,6 +11,7 @@ from moviepy.video.io.VideoFileClip import VideoFileClip
 from PyQt4 import QtGui, QtCore
 from PyQt4.phonon import Phonon
 import PySpin
+import Queue
 import sys
 import time
 
@@ -21,6 +23,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         self.setupUi(self)
         self.cams, self.screens, self.devs = [], [], []
         self.view_dialogs = {}
+        self.video_queue = Queue.Queue()
         self.max_video_length = 0
 
         self._create_icons()
@@ -368,8 +371,6 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
 
             if ret:
 
-                time.sleep(0.01)
-
                 # Create copy to avoid saving overlaid frame
                 save_frame = frame.copy()
 
@@ -377,13 +378,18 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                 if self.state == constants.STATE_MW_RUN \
                         and recording is False:
                     recording = True
-                    # output = self._get_video_writer(cam)
+                    output = self._get_video_writer(
+                        cam,
+                        int(cam.resolution.split("x")[1]),
+                        int(cam.resolution.split("x")[0]),
+                        fps=constants.CAM_FPS/2
+                    )
                     start_time = time.time()
 
                 # Add frames if recording
                 if self.state == constants.STATE_MW_RUN :#and output != None:
-                    images.append(save_frame)
-                    # output.write(frame)
+                    # images.append(save_frame)
+                    output.write(save_frame)
 
                 # Add text overlay
                 if recording:
@@ -408,21 +414,39 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                         #and output != None:
                     recording = False
                     end_time = time.time()
+                    output_fn = "{}_SIDEVIEW_CAM_{}".format(
+                        int(time.time()),
+                        cam.name
+                    )
+                    """output = frameprocessor.FrameWriter(
+                        int(cam.resolution.split("x")[1]),
+                        int(cam.resolution.split("x")[0]),
+                        float(len(images) / (end_time - start_time)),
+                        "{}\{}{}".format(self.leOutput.text(), output_fn,
+                            constants.OUTPUT_FILE_EXT),
+                        images
+                    )
+                    self.video_queue.put(output)
                     output = self._get_video_writer(
                         cam,
                         fps=float(len(images) / (end_time - start_time))
                     )
                     for image in images:
                         time.sleep(0.01)
-                        output.write(image)
+                        output.write(image)"""
 
                     output.release()
+
 
                 kwargs["cb_obj_passback"].emit(cam, frame)
 
         cap.release()
         if output is not None:
-            output.release()
+            output.output.release()
+
+    def _append_flir_images(self, name, image):
+        #self.flir_images[name].append(image)
+        pass
 
     def _handle_flir_cam(self, cam, **kwargs):
         # Opens FLIR camera feed processing to be used in separate thread
@@ -438,6 +462,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
 
         # Set FPS
         # flir_cam.AcquisitionFrameRate.SetValue(constants.CAM_FPS)
+        flir_images = []
 
         # Configure image events
         image_event_handler = flircam.ImageEventHandler(
@@ -446,7 +471,9 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
             self.leOutput.text(),
             kwargs["cb_obj_passback"]
         )
-        flir_cam.RegisterEvent(image_event_handler)
+        #flir_cam.RegisterEvent(image_event_handler)
+        #image_event_handler.parent_queue = self.video_queue
+        #image_event_handler.im_callback = self._append_flir_images
 
         # Set acquisition mode to continuous
         node_acq_mode = PySpin.CEnumerationPtr(nodemap.GetNode(
@@ -455,15 +482,121 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         acq_mode_cont = node_acq_mode_cont.GetValue()
         node_acq_mode.SetIntValue(acq_mode_cont)
 
+        try:
+            # Set acquisition frame rate
+            node_acq_fr = PySpin.CFloatPtr(nodemap.GetNode(
+                "AcquisitionFrameRate"
+            ))
+            #flir_cam.AcquisitionFrameRateEnable.SetValue(True)
+            flir_cam.AcquisitionFrameRate.SetValue(60)
+            print(flir_cam.AcquisitionFrameRate.GetValue())
+
+        except PySpin.SpinnakerException as ex:
+            print(ex)
+
         # Begin collecting images
         flir_cam.BeginAcquisition()
+
+        timer = time.time()
+        start_time = 0
+        recording = False
 
         # Collect images as long as dialog is open
         while cam.name in self.view_dialogs.keys():
 
-            time.sleep(0.01)
+            #time.sleep(0.01)
+            #if (time.time() - timer) * 1000 < (1000 / constants.CAM_FPS):
+             #   continue
+
+            timer = time.time()
+            im = flir_cam.GetNextImage()
+            frame = image_event_handler._to_np(
+                im,
+                flir_cam.Height(),
+                flir_cam.Width()
+            )
+            im.Release()
+
+            small_frame = cv2.resize(frame, None, fx=0.5, fy=0.5,
+                                interpolation=cv2.INTER_AREA)
+            timer = time.time()
+            kwargs["cb_obj_passback"].emit(cam, small_frame)
+
+            # Create copy to avoid saving overlaid frame
+            save_frame = frame.copy()
+
             # Initialize VideoWriter if recording starts
-            image_event_handler.rec_state = self.state
+            if self.state == constants.STATE_MW_RUN \
+                    and recording is False:
+                recording = True
+                output = self._get_video_writer(
+                    cam,
+                    flir_cam.Height(),
+                    flir_cam.Width(),
+                    color=False
+                )
+                start_time = time.time()
+
+            # Add frames if recording
+            if self.state == constants.STATE_MW_RUN:  # and output != None:
+                #flir_images.append(save_frame)
+                output.write(save_frame)
+
+            # Add text overlay
+            if recording:
+                cv2.putText(small_frame, constants.OVERLAY_REC,
+                            constants.OVERLAY_FONT_POINT,
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            constants.OVERLAY_FONT_SCALE,
+                            constants.OVERLAY_FONT_REC_COLOR,
+                            constants.OVERLAY_FONT_THICKNESS
+                            )
+            else:
+                cv2.putText(small_frame, constants.OVERLAY_IDLE,
+                            constants.OVERLAY_FONT_POINT,
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            constants.OVERLAY_FONT_SCALE,
+                            constants.OVERLAY_FONT_IDLE_COLOR,
+                            constants.OVERLAY_FONT_THICKNESS
+                            )
+
+            kwargs["cb_obj_passback"].emit(cam, small_frame)
+
+            # Release file if recording ends
+            if recording and self.state == constants.STATE_MW_IDLE:  # \
+                # and output != None:
+                recording = False
+                """end_time = time.time()
+                output_fn = "{}_SIDEVIEW_CAM_{}".format(
+                    int(end_time),
+                    cam.name
+                )
+                output = frameprocessor.FrameWriter(
+                    flir_cam.Height(),
+                    flir_cam.Width(),
+                    float(len(flir_images) / (end_time - start_time)),
+                    "{}\{}{}".format(self.leOutput.text(), output_fn,
+                                     constants.OUTPUT_FILE_EXT),
+                    flir_images,
+                    color=False
+                )
+                print(output.height)
+                print(output.width)
+                print(output.fps)
+                print(output.fn)
+                print(len(output.images))
+                self.video_queue.put(output)"""
+                output.release()
+
+            #del frame
+
+            """if (time.time() - timer) * 1000 >= (1000 / constants.CAM_FPS):
+                frame = cv2.resize(frame, None, fx=0.5, fy=0.5,
+                                   interpolation=cv2.INTER_AREA)
+                timer = time.time()
+                kwargs["cb_obj_passback"].emit(cam, frame)"""
+            # Initialize VideoWriter if recording starts
+            #image_event_handler.rec_state = self.state
 
         # End collection and reset image events
         """if image_event_handler.output is not None:
@@ -503,7 +636,8 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                     if match_str == cam_obj.link:
                         return flir_cam, cam_list, system
 
-    def _get_video_writer(self, cam, fps=constants.CAM_FPS):
+    def _get_video_writer(self, cam, height, width, fps=constants.CAM_FPS,
+                          color=True):
         # Generates VideoWriter object for saving camera feed frames
         fourcc = cv2.VideoWriter_fourcc(*'XVID')
         output_loc = self.leOutput.text()
@@ -519,18 +653,14 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
             ),
             fourcc,
             fps,
-            (int(cam.resolution.split("x")[0]),
-             int(cam.resolution.split("x")[1])),
-            isColor=True
+            (width, height),
+            isColor=color
         )
         return output
 
     def _handle_video(self, media_obj, **kwargs):
         # Updates video ViewDialog when recording begins
         # Update max video length
-        """fn = str(media_obj.currentSource().fileName())
-        clip = VideoFileClip(fn)
-        self.max_video_length = clip.duration"""
         self._update_max_dur()
 
         playing = True  # Flag indicating when the video is playing
@@ -564,6 +694,39 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
 
                 if self.max_video_length < clip.duration:
                     self.max_video_length = clip.duration
+
+    def _update_vw_dialog_pb(self, dialog_str):
+        self.vw_dialog_pb.setLabelText(dialog_str)
+
+        if dialog_str == "Done.":
+            self.vw_dialog_pb.setMaximum(1)
+            self.vw_dialog_pb.setValue(1)
+
+    def _write_videos(self, **kwargs):
+        # Writes videos at the end of the recording process
+        while not self.video_queue.empty():
+
+            # Get a FrameWriter
+            fwriter = self.video_queue.get()
+
+            # Update prog bar
+            kwargs["cb_str_passback"].emit(
+                "{} {}".format(
+                    constants.DIALOG_WRITING_VIDEO,
+                    fwriter.fn
+                )
+            )
+            print(fwriter.output.isOpened())
+
+            for image in fwriter.images:
+                if self.vw_dialog_pb.wasCanceled():
+                    return
+                fwriter.output.write(image)
+
+            # Free output VideoWriter object
+            fwriter.output.release()
+
+        kwargs["cb_str_passback"].emit("Done.")
 
     def closeEvent(self, event):
         self._destroy_dialogs()
@@ -722,6 +885,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         # already being used
         dialog = QtGui.QMessageBox()
         dialog.setIcon(QtGui.QMessageBox.Critical)
+
         dialog.setText(constants.DIALOG_MESSAGE_CAM_TAKEN.format(cam_name))
         dialog.setWindowTitle(constants.DIALOG_TITLE_ERROR)
         dialog.setStandardButtons(QtGui.QMessageBox.Ok)
@@ -732,6 +896,8 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         if self.state == constants.STATE_MW_RUN:
             self.state = constants.STATE_MW_IDLE
             self.tbControls.setIcon(self.icon_play)
+            time.sleep(1)
+            self.save_videos()
             self._idle_enable()
 
         elif self.state == constants.STATE_MW_IDLE:
@@ -750,6 +916,20 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         worker.signals.int_passback.connect(self._update_progbar)
         worker.signals.str_passback.connect(self._update_timer)
         self.threadpool.start(worker)
+
+    def save_videos(self):
+        # After recording, creates a thread to save the recorded frames
+        if not self.video_queue.empty():
+            self.vw_dialog_pb = QtGui.QProgressDialog(self)
+            self.vw_dialog_pb.setLabel(QtGui.QLabel())
+            self.vw_dialog_pb.setWindowModality(QtCore.Qt.WindowModal)
+            self.vw_dialog_pb.setMinimum(0)
+            self.vw_dialog_pb.setMaximum(0)
+            self.vw_dialog_pb.setWindowTitle(constants.DIALOG_TITLE_VW)
+            self.vw_dialog_pb.show()
+            worker = Worker(self._write_videos)
+            worker.signals.str_passback.connect(self._update_vw_dialog_pb)
+            self.threadpool.start(worker)
 
     # TODO: Add framerate as a field
     # TODO: Poll for resolutions that are actually available

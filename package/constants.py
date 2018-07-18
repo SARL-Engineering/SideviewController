@@ -71,6 +71,7 @@ PROMPT_FOLDER_SELECT = "Select a directory:"
 
 # Dialogs
 DIALOG_TITLE_ERROR = "Error"
+DIALOG_TITLE_VW = "Video Writer"
 DIALOG_MESSAGE_NO_OUTPUT = "No output folder selected."
 DIALOG_MESSAGE_NO_VIDEO = "No video selected for loop termination."
 DIALOG_MESSAGE_NO_CAM = "No camera is currently open for recording."
@@ -78,6 +79,7 @@ DIALOG_MESSAGE_DUP_NAME = "A device with that name already exists."
 DIALOG_MESSAGE_BLANK_FIELDS = "All fields are required."
 DIALOG_MESSAGE_CAM_TAKEN = "The selected camera link is being used by \"{}\""
 DIALOG_OPEN_VIDEO_TITLE = "Open a Video"
+DIALOG_WRITING_VIDEO = "Writing video to file:"
 
 # Overlay
 OVERLAY_IDLE = "Idle"

@@ -3,6 +3,7 @@
 # is copy-pasted in :)
 import constants
 import cv2
+import frameprocessor
 from PyQt4 import QtCore
 import PySpin
 from threadworker import Worker
@@ -24,10 +25,12 @@ class ImageEventHandler(PySpin.ImageEvent):
         self.cam = cam
         self.output_loc = output_loc
         self.output = None
+        self.parent_queue = None
         self.im_passback = im_passback
         self.start_time = 0
         self.mutex = QtCore.QMutex()
         self.im_toggle = True
+        self.im_callback = None
 
         # Save dimensions
         self.height = flir_cam.Height()
@@ -70,16 +73,16 @@ class ImageEventHandler(PySpin.ImageEvent):
             isColor=False
         )
 
-    def _to_np(self, image):
+    def _to_np(self, image, height, width):
         # Converts an ImagePtr to a NumPy array
-        try:
-            data = image.GetData()
+        data = image.GetData()
 
-        except Exception as ex:
-            print(ex)
+        if len(data) != height*width:
+            return np.ones((height, width))
+
         np_image = data.reshape((
-            self.height,
-            self.width
+            height,
+            width
         ))
         return np_image
 
@@ -121,97 +124,3 @@ class ImageEventHandler(PySpin.ImageEvent):
         self.images.append(kwargs["fr"])
 
     # TODO: Clean function and get rid of useless code
-    def OnImageEvent(self, image):
-        """This method defines an image event. In it, the image that triggered
-        the event is converted and saved before incrementing the count. Please
-        see Acquisition example for more in-depth comments on the acquisition
-        of images.
-
-        :param image: Image from event.
-        :type image: ImagePtr
-        :rtype: None
-        """
-        self.mutex.lock()
-        frame = self._to_np(image)
-        save_frame = frame.copy()  # frame to save that won't be overlaid
-
-        # Initialize VideoWriter if recording starts
-        if self.rec_state == constants.STATE_MW_RUN \
-                and self.recording is False:
-            self.recording = True
-            self.start_time = time.time()
-
-        if self.im_toggle:
-            self.im_toggle = False
-
-        else:
-            self.im_toggle = True
-
-        # Add frames if recording
-        if self.rec_state == constants.STATE_MW_RUN and self.im_toggle:
-            """im_worker = Worker(self._append_image, fr=save_frame)
-            self.threadpool.start(im_worker)"""
-            pass
-
-        # Add text overlay
-        if self.recording:
-            cv2.putText(frame, constants.OVERLAY_REC,
-                        constants.OVERLAY_FONT_POINT_LARGE,
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        constants.OVERLAY_FONT_SCALE_LARGE,
-                        constants.OVERLAY_FONT_REC_COLOR,
-                        constants.OVERLAY_FONT_THICKNESS
-                        )
-        else:
-            cv2.putText(frame, constants.OVERLAY_IDLE,
-                        constants.OVERLAY_FONT_POINT_LARGE,
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        constants.OVERLAY_FONT_SCALE_LARGE,
-                        constants.OVERLAY_FONT_IDLE_COLOR,
-                        constants.OVERLAY_FONT_THICKNESS
-                        )
-
-        # Release file if recording ends
-        if self.recording and self.rec_state == constants.STATE_MW_IDLE:
-            self.recording = False
-            self._init_videowriter(
-                fps=float(len(self.images) /
-                          ((time.time() - self.start_time)))
-            )
-            worker = Worker(self._write_vid)
-            self.threadpool.start(worker)
-
-        image.Release()
-
-        if (time.time() - self.timer)*1000 >= (1000/constants.CAM_FPS):
-            frame = cv2.resize(frame, None, fx=0.5, fy=0.5,
-                               interpolation=cv2.INTER_AREA)
-            self.timer = time.time()
-            self.im_passback.emit(self.cam, frame)
-
-        self.mutex.unlock()
-
-    def save_video(self):
-        # Saves current list of images to file
-        self.avi_recorder = PySpin.SpinVideo()
-
-        # Set options
-        option = PySpin.H264Option()
-        option.frameRate = self.fps
-        option.bitrate = 1000000
-        option.height = self.images[0].GetHeight()
-        option.width = self.images[0].GetWidth()
-        output_fn = "{}_SIDEVIEW_CAM_{}".format(
-            int(time.time()),
-            self.cam.name
-        )
-
-        self.avi_recorder.Open("{}\{}".format(
-                self.output_loc,
-                output_fn,
-            ), option)
-
-        for i in range(len(self.images)):
-            self.avi_recorder.Append(self.images[i])
-
-        self.avi_recorder.Close()

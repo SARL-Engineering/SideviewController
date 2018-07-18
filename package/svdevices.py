@@ -32,7 +32,8 @@ class FlatScreen(Screen):
 
 class SerialDevice(object):
 
-    def __init__(self, name, link):
+    def __init__(self, name, link, action):
         super(SerialDevice, self).__init__()
         self.name = name
         self.link = link
+        self.action = action
