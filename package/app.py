@@ -19,7 +19,6 @@ def main():
     main_win = MainWindow()
     sys.exit(app.exec_())
 
-
 # idiomatic wrapper
 def run():
     main()

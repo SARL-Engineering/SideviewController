@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>734</width>
-    <height>403</height>
+    <width>750</width>
+    <height>448</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -239,7 +239,7 @@
     <item>
      <widget class="QTabWidget" name="tabGroup">
       <property name="currentIndex">
-       <number>0</number>
+       <number>2</number>
       </property>
       <widget class="QWidget" name="tabCam">
        <attribute name="title">
@@ -300,6 +300,19 @@
                 <verstretch>0</verstretch>
                </sizepolicy>
               </property>
+              <property name="maximumSize">
+               <size>
+                <width>200</width>
+                <height>30</height>
+               </size>
+              </property>
+              <property name="text">
+               <string>PushButton</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pbCamRefresh">
               <property name="maximumSize">
                <size>
                 <width>200</width>
@@ -413,20 +426,20 @@
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="tabDevices">
+      <widget class="QWidget" name="tabCom">
        <attribute name="title">
         <string>Tab 1</string>
        </attribute>
        <layout class="QHBoxLayout" name="horizontalLayout_6">
         <item>
-         <layout class="QHBoxLayout" name="hlTabDevices" stretch="4,1">
+         <layout class="QHBoxLayout" name="hlTabCOM" stretch="4,1">
           <item>
-           <widget class="QListWidget" name="lwDevices"/>
+           <widget class="QListWidget" name="lwCOM"/>
           </item>
           <item>
-           <layout class="QVBoxLayout" name="vlDevices">
+           <layout class="QVBoxLayout" name="vlCOM">
             <item>
-             <widget class="QPushButton" name="pbDevicesAdd">
+             <widget class="QPushButton" name="pbCOMAdd">
               <property name="maximumSize">
                <size>
                 <width>200</width>
@@ -439,7 +452,7 @@
              </widget>
             </item>
             <item>
-             <widget class="QPushButton" name="pbDevicesEdit">
+             <widget class="QPushButton" name="pbCOMEdit">
               <property name="maximumSize">
                <size>
                 <width>200</width>
@@ -452,7 +465,7 @@
              </widget>
             </item>
             <item>
-             <widget class="QPushButton" name="pbDevicesOpen">
+             <widget class="QPushButton" name="pbCOMOpen">
               <property name="maximumSize">
                <size>
                 <width>200</width>
@@ -465,7 +478,7 @@
              </widget>
             </item>
             <item>
-             <widget class="QPushButton" name="pbDevicesRemove">
+             <widget class="QPushButton" name="pbCOMRemove">
               <property name="maximumSize">
                <size>
                 <width>200</width>
@@ -478,7 +491,7 @@
              </widget>
             </item>
             <item>
-             <spacer name="vsDevices">
+             <spacer name="vsCOM">
               <property name="orientation">
                <enum>Qt::Vertical</enum>
               </property>
@@ -518,7 +531,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>734</width>
+     <width>750</width>
      <height>21</height>
     </rect>
    </property>

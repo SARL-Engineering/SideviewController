@@ -2,6 +2,7 @@ import constants
 import svdevices
 from threadworker import Worker
 from ui import camdialog_ui, screendialog_ui, viewdialog_ui
+from ui import comdialog_ui, rulesdialog_ui
 import cv2
 import PySpin
 from PyQt4 import QtGui, QtCore
@@ -186,6 +187,92 @@ class ScreenDialog(QtGui.QDialog, screendialog_ui.Ui_screenDialog):
         elif type(screen) is svdevices.Video:
             self.rbScreenVideo.click()
             self.leScreenVideo.setText(screen.link)
+
+
+class COMDialog(QtGui.QDialog, comdialog_ui.Ui_COMDialog):
+
+    def __init__(self, context, parent=None):
+        super(COMDialog, self).__init__(parent)
+        self.setupUi(self)
+        self.context = context
+        self.setModal(True)
+
+        self._set_labels()
+        self._set_default_gui_state()
+        self._connect_signals()
+
+        self.refresh_gui()
+
+    def _set_labels(self):
+        self.labelCOMName.setText(constants.LABEL_LABEL_COM_NAME)
+        self.labelCOMLink.setText(constants.LABEL_LABEL_COM_LINK)
+        self.labelCOMSignal.setText(constants.LABEL_LABEL_COM_SIGNAL)
+        self.labelCOMBaudRate.setText(constants.LABEL_LABEL_COM_BAUD_RATE)
+        self.labelCOMRules.setText(constants.LABEL_LABEL_COM_RULES)
+
+    def _set_default_gui_state(self):
+        if self.context == constants.STATE_DIALOG_ADD:
+            self.setWindowTitle(constants.LABEL_COM_DIALOG_TITLE_ADD)
+
+        elif self.context == constants.STATE_DIALOG_EDIT:
+            self.setWindowTitle(constants.LABEL_COM_DIALOG_TITLE_EDIT)
+
+    def _connect_signals(self):
+        pass
+
+    def refresh_gui(self):
+        pass
+
+    def add_rule(self):
+        pass
+
+    def edit_rule(self):
+        pass
+
+    def remove_rule(self):
+        pass
+
+class RulesDialog(QtGui.QDialog, rulesdialog_ui.Ui_rulesDialog):
+
+    def __init__(self, context, parent=None):
+        super(RulesDialog, self).__init__(parent)
+        self.setupUi(self)
+        self.context = context
+        self.setModal(True)
+
+        self._set_labels()
+        self._set_default_gui_state()
+        self._connect_signals()
+
+        self.refresh_gui()
+
+    def _set_labels(self):
+        self.labelRuleNum.setText(constants.LABEL_LABEL_RULE_NUM)
+        self.rbRuleAt.setText(constants.LABEL_RB_RULE_AT)
+        self.rbRuleEvery.setText(constants.LABEL_RB_RULE_EVERY)
+
+    def _set_default_gui_state(self):
+        if self.context == constants.STATE_DIALOG_ADD:
+            self.setWindowTitle(constants.LABEL_RULE_DIALOG_TITLE_ADD)
+
+        elif self.context == constants.STATE_DIALOG_EDIT:
+            self.setWindowTitle(constants.LABEL_RULE_DIALOG_TITLE_EDIT)
+
+    def _connect_signals(self):
+        self.rbRuleAt.clicked.connect(self.refresh_gui)
+        self.rbRuleEvery.clicked.connect(self.refresh_gui)
+
+    def refresh_gui(self):
+        if self.rbRuleAt.isChecked():
+            self.teRuleAt.setEnabled(True)
+            self.teRuleEvery.setEnabled(False)
+
+        elif self.rbRuleEvery.isChecked():
+            self.teRuleAt.setEnabled(False)
+            self.teRuleEvery.setEnabled(True)
+
+        else:
+            self.rbRuleAt.click()
 
 
 class ViewDialog(QtGui.QDialog, viewdialog_ui.Ui_Dialog):

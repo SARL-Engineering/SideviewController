@@ -122,5 +122,3 @@ class ImageEventHandler(PySpin.ImageEvent):
 
     def _append_image(self, **kwargs):
         self.images.append(kwargs["fr"])
-
-    # TODO: Clean function and get rid of useless code

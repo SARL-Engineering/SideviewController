@@ -4,6 +4,7 @@ import customdialog
 import cv2
 import flircam
 import frameprocessor
+import numpy as np
 import svdevices
 from threadworker import Worker
 from ui import mainwindow_ui
@@ -21,10 +22,13 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
         self.setupUi(self)
-        self.cams, self.screens, self.devs = [], [], []
+        self.cams, self.screens, self.coms = [], [], []
         self.view_dialogs = {}
         self.video_queue = Queue.Queue()
         self.max_video_length = 0
+        self.settings = None
+        self.config_widgets = [self.leOutput, self.rbCRTime, self.rbCRLoops,
+                               self.teCSDuration, self.spinLoops]
 
         self._create_icons()
         self._set_labels()
@@ -75,14 +79,15 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         self.pbCamEdit.setText(constants.LABEL_PB_EDIT)
         self.pbCamOpen.setText(constants.LABEL_PB_OPEN)
         self.pbCamRemove.setText(constants.LABEL_PB_REMOVE)
+        self.pbCamRefresh.setText(constants.LABEL_PB_REFRESH_CAM)
         self.pbScreenAdd.setText(constants.LABEL_PB_ADD)
         self.pbScreenEdit.setText(constants.LABEL_PB_EDIT)
         self.pbScreenOpen.setText(constants.LABEL_PB_OPEN)
         self.pbScreenRemove.setText(constants.LABEL_PB_REMOVE)
-        self.pbDevicesAdd.setText(constants.LABEL_PB_ADD)
-        self.pbDevicesEdit.setText(constants.LABEL_PB_EDIT)
-        self.pbDevicesOpen.setText(constants.LABEL_PB_OPEN)
-        self.pbDevicesRemove.setText(constants.LABEL_PB_REMOVE)
+        self.pbCOMAdd.setText(constants.LABEL_PB_ADD)
+        self.pbCOMEdit.setText(constants.LABEL_PB_EDIT)
+        self.pbCOMOpen.setText(constants.LABEL_PB_OPEN)
+        self.pbCOMRemove.setText(constants.LABEL_PB_REMOVE)
 
         self.rbCRLoops.setText(constants.LABEL_RB_LOOP)
         self.rbCRTime.setText(constants.LABEL_RB_TIME)
@@ -91,8 +96,8 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                                  constants.LABEL_TAB_CAM)
         self.tabGroup.setTabText(constants.IDX_TAB_SCREEN,
                                  constants.LABEL_TAB_SCREEN)
-        self.tabGroup.setTabText(constants.IDX_TAB_DEVICES,
-                                 constants.LABEL_TAB_DEV)
+        self.tabGroup.setTabText(constants.IDX_TAB_COM,
+                                 constants.LABEL_TAB_COM)
 
     # TODO: Implement configuration saving and opening
     def _set_default_gui_state(self):
@@ -103,13 +108,14 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
 
         self.progressBar.setValue(0)
         self.teCSDuration.setMinimumTime(QtCore.QTime(0, 0, 1))
-        self.max_video_length = 0
         self.state = constants.STATE_MW_IDLE
 
     def _set_icons(self):
         # Sets icons in window and taskbar
         self.appid = constants.APP_TITLE
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(self.appid)
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            self.appid
+        )
 
     def _connect_signals(self):
         # Connects signals to all appropriate gui elements
@@ -129,19 +135,147 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         self.pbScreenEdit.clicked.connect(self.edit_screen)
         self.pbScreenOpen.clicked.connect(self.open_screen)
         self.pbScreenRemove.clicked.connect(self.remove_gen_obj)
-        self.pbDevicesRemove.clicked.connect(self.remove_gen_obj)
+        self.pbCOMAdd.clicked.connect(self.add_COM)
+        self.pbCOMEdit.clicked.connect(self.edit_COM)
+        self.pbCOMOpen.clicked.connect(self.open_COM)
+        self.pbCOMRemove.clicked.connect(self.remove_gen_obj)
         self.lwCam.clicked.connect(self.refresh_tab_buts)
         self.lwScreen.clicked.connect(self.refresh_tab_buts)
-        self.lwDevices.clicked.connect(self.refresh_tab_buts)
+        self.lwCOM.clicked.connect(self.refresh_tab_buts)
 
         self.actionStart.triggered.connect(self.toggle_run)
         self.actionStop.triggered.connect(self.toggle_run)
         self.actionCamera.triggered.connect(self.add_cam)
         self.actionVideo.triggered.connect(self.add_screen)
 
+        self.actionNew_Config.triggered.connect(self._default_config)
+        self.actionSave_Config.triggered.connect(self._save_config)
+        self.actionSave_Config_As.triggered.connect(self._save_as_config)
+        self.actionOpen_Config.triggered.connect(self._open_config)
+
     def _start_threadpool(self):
         # Start handler for future threads
         self.threadpool = QtCore.QThreadPool()
+
+    def _default_config(self):
+        # Sets the state of the GUI to the default configuration
+        self._destroy_dialogs()
+
+        self.leOutput.clear()
+        self.spinLoops.setValue(1)
+        self.rbCRTime.click()
+
+        del self.cams[:]
+        del self.screens[:]
+        del self.coms[:]
+
+        self.settings = None
+
+        self._set_default_gui_state()
+        self.refresh_gui()
+
+    def _save_config(self):
+        # Go to Save As if there isn't a config loaded
+        if self.settings is None:
+            self._save_as_config()
+            return
+
+        # Save widget states
+        for widget in self.config_widgets:
+            meta_obj = widget.metaObject()
+
+            for i in range(meta_obj.propertyCount()):
+
+                name = meta_obj.property(i).name()
+                self.settings.setValue("{}/{}".format(
+                    widget.objectName(), name),
+                    widget.property(name))
+
+        # Save svdevices objects
+        self.settings.setValue("cams", self.cams)
+        self.settings.setValue("screens", self.screens)
+        self.settings.setValue("coms", self.coms)
+
+    def _save_as_config(self):
+        # Get a location for saving and a name
+        dialog = QtGui.QFileDialog()
+        dialog.setAcceptMode(QtGui.QFileDialog.AcceptSave)
+        fn = dialog.getSaveFileName(
+            None,
+            "asdf",
+            constants.DIR_CONFIG,
+            constants.FILTER_CONFIG
+        )
+        self.settings = QtCore.QSettings(fn, QtCore.QSettings.IniFormat)
+
+        # Save widget states
+        for widget in self.config_widgets:
+            meta_obj = widget.metaObject()
+
+            for i in range(meta_obj.propertyCount()):
+
+                name = meta_obj.property(i).name()
+                self.settings.setValue("{}/{}".format(
+                    widget.objectName(), name),
+                    widget.property(name))
+
+        # Save svdevices objects
+        self.settings.setValue("cams", self.cams)
+        self.settings.setValue("screens", self.screens)
+        self.settings.setValue("coms", self.coms)
+
+    def _open_config(self):
+        # Get config file
+        config_ini = QtGui.QFileDialog.getOpenFileName(
+            None,
+            constants.PROMPT_CONFIG_SELECT,
+            constants.DIR_CONFIG,
+            constants.FILTER_CONFIG
+        )
+
+        # Create QSettings object
+        self.settings = QtCore.QSettings(
+            config_ini,
+            QtCore.QSettings.IniFormat
+        )
+
+        # Update gui with config loaded
+        finfo = QtCore.QFileInfo(config_ini)
+        if finfo.exists() and finfo.isFile():
+
+            for widget in self.config_widgets:
+
+                meta_obj = widget.metaObject()
+
+                for i in range(meta_obj.propertyCount()):
+
+                    name = meta_obj.property(i).name()
+                    val = self.settings.value("{}/{}".format(
+                        widget.objectName(),
+                        name),
+                        widget.property(name)
+                    )
+                    widget.setProperty(name, val)
+
+        # Fix displaying text as password-style text
+        self.leOutput.setEchoMode(QtGui.QLineEdit.Normal)
+
+        # Save svdevices objects
+        self.cams = self.settings.value("cams", self.cams).toPyObject()
+        if self.cams is None:
+            self.cams = []
+
+        self.screens = self.settings.value(
+            "screens", self.screens
+        ).toPyObject()
+        if self.screens is None:
+            self.screens = []
+
+        self.coms = self.settings.value("coms", self.coms).toPyObject()
+        if self.coms is None:
+            self.coms = []
+
+        self.refresh_gui()
 
     def _run_disable(self):
         # Disables all elements that shouldn't be used while recording
@@ -159,9 +293,9 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         self.pbScreenAdd.setEnabled(False)
         self.pbScreenEdit.setEnabled(False)
         self.pbScreenRemove.setEnabled(False)
-        self.pbDevicesAdd.setEnabled(False)
-        self.pbDevicesEdit.setEnabled(False)
-        self.pbDevicesRemove.setEnabled(False)
+        self.pbCOMAdd.setEnabled(False)
+        self.pbCOMEdit.setEnabled(False)
+        self.pbCOMRemove.setEnabled(False)
 
         self.actionNew_Config.setEnabled(False)
         self.actionOpen_Config.setEnabled(False)
@@ -188,9 +322,9 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         self.pbScreenAdd.setEnabled(True)
         self.pbScreenEdit.setEnabled(True)
         self.pbScreenRemove.setEnabled(True)
-        self.pbDevicesAdd.setEnabled(True)
-        self.pbDevicesEdit.setEnabled(True)
-        self.pbDevicesRemove.setEnabled(True)
+        self.pbCOMAdd.setEnabled(True)
+        self.pbCOMEdit.setEnabled(True)
+        self.pbCOMRemove.setEnabled(True)
 
         self.actionNew_Config.setEnabled(True)
         self.actionOpen_Config.setEnabled(True)
@@ -227,7 +361,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         # filled out
         if new_obj.name in [cam.name for cam in self.cams] \
             or new_obj.name in [screen.name for screen in self.screens] \
-            or new_obj.name in [dev.name for dev in self.devs]:
+            or new_obj.name in [com.name for com in self.coms]:
                 self.show_dialog_dup_name()
                 return False
 
@@ -353,7 +487,6 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         # set in dialog
         dialog.camFrame.setPixmap(pixmap)
 
-    # TODO: Cam freezes when running multiple cameras simultaneously
     def _handle_cam(self, cam, **kwargs):
         # Opens camera feed processing to be used in separate thread
         cap = cv2.VideoCapture(int(cam.link[3:]))
@@ -389,7 +522,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                 # Add frames if recording
                 if self.state == constants.STATE_MW_RUN :#and output != None:
                     # images.append(save_frame)
-                    output.write(save_frame)
+                    output.write(np.uint8(save_frame))
 
                 # Add text overlay
                 if recording:
@@ -418,22 +551,6 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                         int(time.time()),
                         cam.name
                     )
-                    """output = frameprocessor.FrameWriter(
-                        int(cam.resolution.split("x")[1]),
-                        int(cam.resolution.split("x")[0]),
-                        float(len(images) / (end_time - start_time)),
-                        "{}\{}{}".format(self.leOutput.text(), output_fn,
-                            constants.OUTPUT_FILE_EXT),
-                        images
-                    )
-                    self.video_queue.put(output)
-                    output = self._get_video_writer(
-                        cam,
-                        fps=float(len(images) / (end_time - start_time))
-                    )
-                    for image in images:
-                        time.sleep(0.01)
-                        output.write(image)"""
 
                     output.release()
 
@@ -442,11 +559,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
 
         cap.release()
         if output is not None:
-            output.output.release()
-
-    def _append_flir_images(self, name, image):
-        #self.flir_images[name].append(image)
-        pass
+            output.release()
 
     def _handle_flir_cam(self, cam, **kwargs):
         # Opens FLIR camera feed processing to be used in separate thread
@@ -487,9 +600,15 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
             node_acq_fr = PySpin.CFloatPtr(nodemap.GetNode(
                 "AcquisitionFrameRate"
             ))
-            #flir_cam.AcquisitionFrameRateEnable.SetValue(True)
+            # Turn off frame rate auto parameter
+            node_fr_auto = PySpin.CEnumerationPtr(
+                nodemap.GetNode("AcquisitionFrameRateAuto")
+            )
+            node_fr_auto_off = node_fr_auto.GetEntryByName("Off")
+            fr_auto_off = node_fr_auto_off.GetValue()
+            node_fr_auto.SetIntValue(fr_auto_off)
+
             flir_cam.AcquisitionFrameRate.SetValue(60)
-            print(flir_cam.AcquisitionFrameRate.GetValue())
 
         except PySpin.SpinnakerException as ex:
             print(ex)
@@ -497,30 +616,20 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         # Begin collecting images
         flir_cam.BeginAcquisition()
 
-        timer = time.time()
-        start_time = 0
         recording = False
 
         # Collect images as long as dialog is open
         while cam.name in self.view_dialogs.keys():
 
-            #time.sleep(0.01)
-            #if (time.time() - timer) * 1000 < (1000 / constants.CAM_FPS):
-             #   continue
-
-            timer = time.time()
             im = flir_cam.GetNextImage()
             frame = image_event_handler._to_np(
                 im,
                 flir_cam.Height(),
                 flir_cam.Width()
             )
-            im.Release()
 
             small_frame = cv2.resize(frame, None, fx=0.5, fy=0.5,
                                 interpolation=cv2.INTER_AREA)
-            timer = time.time()
-            kwargs["cb_obj_passback"].emit(cam, small_frame)
 
             # Create copy to avoid saving overlaid frame
             save_frame = frame.copy()
@@ -535,12 +644,6 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                     flir_cam.Width(),
                     color=False
                 )
-                start_time = time.time()
-
-            # Add frames if recording
-            if self.state == constants.STATE_MW_RUN:  # and output != None:
-                #flir_images.append(save_frame)
-                output.write(save_frame)
 
             # Add text overlay
             if recording:
@@ -548,7 +651,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                             constants.OVERLAY_FONT_POINT,
                             cv2.FONT_HERSHEY_SIMPLEX,
                             constants.OVERLAY_FONT_SCALE,
-                            constants.OVERLAY_FONT_REC_COLOR,
+                            constants.OVERLAY_FONT_WHITE_COLOR,
                             constants.OVERLAY_FONT_THICKNESS
                             )
             else:
@@ -556,53 +659,27 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                             constants.OVERLAY_FONT_POINT,
                             cv2.FONT_HERSHEY_SIMPLEX,
                             constants.OVERLAY_FONT_SCALE,
-                            constants.OVERLAY_FONT_IDLE_COLOR,
+                            constants.OVERLAY_FONT_WHITE_COLOR,
                             constants.OVERLAY_FONT_THICKNESS
                             )
 
             kwargs["cb_obj_passback"].emit(cam, small_frame)
 
+            # Add frames if recording
+            if self.state == constants.STATE_MW_RUN:  # and output != None:
+                output.write(save_frame)
+
             # Release file if recording ends
             if recording and self.state == constants.STATE_MW_IDLE:  # \
                 # and output != None:
                 recording = False
-                """end_time = time.time()
-                output_fn = "{}_SIDEVIEW_CAM_{}".format(
-                    int(end_time),
-                    cam.name
-                )
-                output = frameprocessor.FrameWriter(
-                    flir_cam.Height(),
-                    flir_cam.Width(),
-                    float(len(flir_images) / (end_time - start_time)),
-                    "{}\{}{}".format(self.leOutput.text(), output_fn,
-                                     constants.OUTPUT_FILE_EXT),
-                    flir_images,
-                    color=False
-                )
-                print(output.height)
-                print(output.width)
-                print(output.fps)
-                print(output.fn)
-                print(len(output.images))
-                self.video_queue.put(output)"""
                 output.release()
 
-            #del frame
-
-            """if (time.time() - timer) * 1000 >= (1000 / constants.CAM_FPS):
-                frame = cv2.resize(frame, None, fx=0.5, fy=0.5,
-                                   interpolation=cv2.INTER_AREA)
-                timer = time.time()
-                kwargs["cb_obj_passback"].emit(cam, frame)"""
-            # Initialize VideoWriter if recording starts
-            #image_event_handler.rec_state = self.state
+            #im.Release()
 
         # End collection and reset image events
-        """if image_event_handler.output is not None:
-            image_event_handler.output.release()"""
         flir_cam.EndAcquisition()
-        flir_cam.UnregisterEvent(image_event_handler)
+        # flir_cam.UnregisterEvent(image_event_handler)
 
         # De-initialize camera
         flir_cam.DeInit()
@@ -775,25 +852,25 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                 self.pbScreenOpen.setEnabled(False)
                 self.pbScreenRemove.setEnabled(False)
 
-        elif self.tabGroup.currentIndex() == constants.IDX_TAB_DEVICES:
-            if len(self.lwDevices.selectedItems()) < 1:
+        elif self.tabGroup.currentIndex() == constants.IDX_TAB_COM:
+            if len(self.lwCOM.selectedItems()) < 1:
                 self.lwCam.setCurrentRow(-1)
-                self.pbDevicesEdit.setEnabled(False)
-                self.pbDevicesOpen.setEnabled(False)
-                self.pbDevicesRemove.setEnabled(False)
+                self.pbCOMEdit.setEnabled(False)
+                self.pbCOMOpen.setEnabled(False)
+                self.pbCOMRemove.setEnabled(False)
 
         # Populate device lists
         self.lwCam.clear()
         self.lwScreen.clear()
-        self.lwDevices.clear()
+        self.lwCOM.clear()
         for cam in self.cams:
             self.lwCam.addItem(cam.name)
 
         for screen in self.screens:
             self.lwScreen.addItem(screen.name)
 
-        for dev in self.devs:
-            self.lwDevices.addItem(dev.name)
+        for com in self.coms:
+            self.lwCOM.addItem(com.name)
 
     def refresh_tab_buts(self):
         # Duplicate code from refresh_gui() for simplified button ability
@@ -827,10 +904,10 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                 self.pbScreenOpen.setEnabled(True)
                 self.pbScreenRemove.setEnabled(True)
 
-        elif self.tabGroup.currentIndex() == constants.IDX_TAB_DEVICES:
-            self.pbDevicesEdit.setEnabled(True)
-            self.pbDevicesOpen.setEnabled(True)
-            self.pbDevicesRemove.setEnabled(True)
+        elif self.tabGroup.currentIndex() == constants.IDX_TAB_COM:
+            self.pbCOMEdit.setEnabled(True)
+            self.pbCOMOpen.setEnabled(True)
+            self.pbCOMRemove.setEnabled(True)
 
     # TODO: Move static dialog functions to new file
     def show_dialog_no_output(self):
@@ -1075,6 +1152,53 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                             video_name=screen.name)
             self.threadpool.start(worker)
 
+    def add_COM(self):
+        dialog = customdialog.COMDialog(constants.STATE_DIALOG_ADD)
+        if dialog.exec_():
+            # Create a new Camera object
+            new_com = svdevices.COMDevice(
+                dialog.leCOMName.text(),
+                dialog.cbCOMLink.text(),
+                dialog.leCOMSignal.text(),
+                dialog.leCOMBaudRate.text(),
+                dialog.cbCOMRules.text().split(",")[1:]
+            )
+            # Check that given data is valid
+            if self._valid_add(new_com):
+                self.coms.append(new_com)
+
+            else:
+                self.add_COM()
+
+        self.refresh_gui()
+
+    def edit_COM(self):
+        dialog = customdialog.COMDialog(constants.STATE_DIALOG_EDIT)
+        com_pos = self.lwCOM.currentRow()
+        com = self.coms[com_pos]
+        self.coms.pop(com_pos)
+        dialog.populate(com)
+        if dialog.exec_():
+            new_com = svdevices.COMDevice(
+                dialog.leCOMName.text(),
+                dialog.cbCOMLink.text(),
+                dialog.leCOMSignal.text(),
+                dialog.leCOMBaudRate.text(),
+                dialog.cbCOMRules.text().split(",")[1:]
+            )
+
+            if self._valid_add(new_com):
+                self.cams.insert(com_pos, new_com)
+
+            else:
+                self.cams.insert(com_pos, com)
+                self.edit_COM()
+
+        self.refresh_gui()
+
+    def open_COM(self):
+        pass
+
     def remove_gen_obj(self):
         # Removes cam, screen, or device that is selected
         if self.tabGroup.currentIndex() == constants.IDX_TAB_CAM:
@@ -1087,9 +1211,9 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
             for item in self.lwScreen.selectedItems():
                 self.lwScreen.setItemSelected(item, False)
 
-        elif self.tabGroup.currentIndex() == constants.IDX_TAB_DEVICES:
-            self.devices.pop(self.lwDevices.currentRow())
-            for item in self.lwDevices.selectedItems():
-                self.lwDevices.setItemSelected(item, False)
+        elif self.tabGroup.currentIndex() == constants.IDX_TAB_COMS:
+            self.coms.pop(self.lwCOM.currentRow())
+            for item in self.lwCOM.selectedItems():
+                self.lwCOM.setItemSelected(item, False)
 
         self.refresh_gui()

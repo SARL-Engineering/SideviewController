@@ -30,10 +30,27 @@ class FlatScreen(Screen):
         self.color = color
 
 
-class SerialDevice(object):
+class COMDevice(object):
 
-    def __init__(self, name, link, action):
-        super(SerialDevice, self).__init__()
+    def __init__(self, name, link, signal, baud_rate, rules):
+        super(COMDevice, self).__init__()
         self.name = name
         self.link = link
-        self.action = action
+        self.signal = signal
+        self.baud_rate = baud_rate
+        self.rules = rules
+
+
+class Rule(object):
+
+    def __init__(self, num, time_intv, isAt=True):
+        super(Rule, self).__init__()
+        self.num = num
+        self.time_intv = time_intv
+        if isAt:
+            self.isAt = True
+            self.isEvery = False
+
+        else:
+            self.isAt = False
+            self.isEvery = True
