@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>367</width>
-    <height>127</height>
+    <height>150</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -59,6 +59,13 @@
       </widget>
      </item>
     </layout>
+   </item>
+   <item>
+    <widget class="QPushButton" name="pbRuleRemove">
+     <property name="text">
+      <string>PushButton</string>
+     </property>
+    </widget>
    </item>
    <item>
     <widget class="QDialogButtonBox" name="bbScreen">

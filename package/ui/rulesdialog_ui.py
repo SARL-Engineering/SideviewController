@@ -25,7 +25,7 @@ except AttributeError:
 class Ui_rulesDialog(object):
     def setupUi(self, rulesDialog):
         rulesDialog.setObjectName(_fromUtf8("rulesDialog"))
-        rulesDialog.resize(367, 127)
+        rulesDialog.resize(367, 150)
         self.verticalLayout = QtGui.QVBoxLayout(rulesDialog)
         self.verticalLayout.setObjectName(_fromUtf8("verticalLayout"))
         self.formScreen = QtGui.QFormLayout()
@@ -50,6 +50,9 @@ class Ui_rulesDialog(object):
         self.teRuleEvery.setObjectName(_fromUtf8("teRuleEvery"))
         self.formScreen.setWidget(2, QtGui.QFormLayout.FieldRole, self.teRuleEvery)
         self.verticalLayout.addLayout(self.formScreen)
+        self.pbRuleRemove = QtGui.QPushButton(rulesDialog)
+        self.pbRuleRemove.setObjectName(_fromUtf8("pbRuleRemove"))
+        self.verticalLayout.addWidget(self.pbRuleRemove)
         self.bbScreen = QtGui.QDialogButtonBox(rulesDialog)
         self.bbScreen.setOrientation(QtCore.Qt.Horizontal)
         self.bbScreen.setStandardButtons(QtGui.QDialogButtonBox.Cancel|QtGui.QDialogButtonBox.Ok)
@@ -68,4 +71,5 @@ class Ui_rulesDialog(object):
         self.rbRuleEvery.setText(_translate("rulesDialog", "RadioButton", None))
         self.teRuleAt.setDisplayFormat(_translate("rulesDialog", "hh:mm:ss", None))
         self.teRuleEvery.setDisplayFormat(_translate("rulesDialog", "hh:mm:ss", None))
+        self.pbRuleRemove.setText(_translate("rulesDialog", "PushButton", None))
 

@@ -13,6 +13,7 @@ from PyQt4 import QtGui, QtCore
 from PyQt4.phonon import Phonon
 import PySpin
 import Queue
+import serial
 import sys
 import time
 
@@ -26,6 +27,8 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         self.view_dialogs = {}
         self.video_queue = Queue.Queue()
         self.max_video_length = 0
+        self.signal_timeline = {}
+        self.active_comports = []
         self.settings = None
         self.config_widgets = [self.leOutput, self.rbCRTime, self.rbCRLoops,
                                self.teCSDuration, self.spinLoops]
@@ -99,7 +102,6 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         self.tabGroup.setTabText(constants.IDX_TAB_COM,
                                  constants.LABEL_TAB_COM)
 
-    # TODO: Implement configuration saving and opening
     def _set_default_gui_state(self):
         # Sets default states of all gui elements
         self.tbControls.setIcon(self.icon_play)
@@ -109,6 +111,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         self.progressBar.setValue(0)
         self.teCSDuration.setMinimumTime(QtCore.QTime(0, 0, 1))
         self.state = constants.STATE_MW_IDLE
+        self.tabGroup.setCurrentIndex(constants.IDX_TAB_CAM)
 
     def _set_icons(self):
         # Sets icons in window and taskbar
@@ -392,6 +395,15 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
             self.show_dialog_blank_fields()
             return False
 
+        elif type(new_obj) is svdevices.COMDevice and \
+                (new_obj.name == "" or
+                new_obj.baud_rate == "" or
+                new_obj.link == "" or
+                new_obj.signal == "" or
+                len(new_obj.rules) == 0):
+            self.show_dialog_blank_fields()
+            return False
+
         return True
 
     def _run_timer(self, **kwargs):
@@ -401,6 +413,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
             time.sleep(0.05)
             current_time = time.time()
             d_time = current_time - start_time
+            self._send_COM_signals(d_time)
             kwargs["cb_str_passback"].emit(time.strftime(
                 "%H:%M:%S.{0:03d}".format(
                     int(round(d_time % 1000, 3) * 1000) % 1000),
@@ -408,6 +421,20 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
 
             if self._end_timer(d_time, kwargs["cb_int_passback"]):
                 break
+
+    def _send_COM_signals(self, trigger_time):
+        # Checks to see if signals need to be sent to a COM port
+        for signal_time, com_info in self.signal_timeline.items():
+
+            # If time has elapsed for the signal trigger
+            if signal_time <= trigger_time:
+
+                # Find the corresponding comport
+                for comport in self.active_comports:
+
+                    # Send the signal
+                    if comport.name == com_info[0]:
+                        comport.write(com_info[1])
 
     def _update_progbar(self, cent_val):
         # Mid-thread slot to write progress to progress bar
@@ -975,6 +1002,8 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
             self.tbControls.setIcon(self.icon_play)
             time.sleep(1)
             self.save_videos()
+            self.close_comports()
+            self.signal_timeline = {}
             self._idle_enable()
 
         elif self.state == constants.STATE_MW_IDLE:
@@ -983,9 +1012,43 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
             self.state = constants.STATE_MW_RUN
             self.tbControls.setIcon(self.icon_stop)
             self._run_disable()
+            self.open_comports()
+            self.create_timeline()
             self.start_timer()
 
         self.refresh_gui()
+
+    def create_timeline(self):
+        # Creates and sets a list of times to trigger a signal
+        if self.rbCRLoops.isChecked():
+            end_time = sum(x * int(t) for x, t in zip(
+                [3600, 60, 1],
+                self.teCSDuration.text().split(":")
+            ))
+
+        elif self.rbCRTime.isChecked():
+            end_time = int(self.spinLoops.value()) * self.max_video_length
+
+        for vd_name, vd in self.view_dialogs.items():
+
+            if type(vd) is customdialog.COMDialog:
+
+                for rule in vd.com.rules:
+
+                    if rule.isAt:
+                        secs = int(rule.time_intv[0])*3600 \
+                                + int(rule.time_intv[1])*60 \
+                                + int(rule.time_intv[0])
+                        self.signal_timeline[secs] = (vd.com.link,
+                                                      vd.com.signal)
+
+                    elif rule.isEvery:
+                        interval = int(rule.time_intv[0])*3600 \
+                                + int(rule.time_intv[1])*60 \
+                                + int(rule.time_intv[0])
+                        for i in range(0, end_time + 1, interval):
+                            self.signal_timeline[i] = (vd.com.link,
+                                                       vd.com.signal)
 
     def start_timer(self):
         # Starts new thread updating runtime
@@ -1158,10 +1221,10 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
             # Create a new Camera object
             new_com = svdevices.COMDevice(
                 dialog.leCOMName.text(),
-                dialog.cbCOMLink.text(),
+                dialog.cbCOMLink.currentText(),
                 dialog.leCOMSignal.text(),
                 dialog.leCOMBaudRate.text(),
-                dialog.cbCOMRules.text().split(",")[1:]
+                dialog.rules
             )
             # Check that given data is valid
             if self._valid_add(new_com):
@@ -1181,23 +1244,30 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         if dialog.exec_():
             new_com = svdevices.COMDevice(
                 dialog.leCOMName.text(),
-                dialog.cbCOMLink.text(),
+                dialog.cbCOMLink.currentText(),
                 dialog.leCOMSignal.text(),
                 dialog.leCOMBaudRate.text(),
-                dialog.cbCOMRules.text().split(",")[1:]
+                dialog.rules
             )
 
             if self._valid_add(new_com):
-                self.cams.insert(com_pos, new_com)
+                self.coms.insert(com_pos, new_com)
 
             else:
-                self.cams.insert(com_pos, com)
+                self.coms.insert(com_pos, com)
                 self.edit_COM()
 
         self.refresh_gui()
 
     def open_COM(self):
-        pass
+        # Shows all COM information and puts it in queue to signal port
+        com = self.coms[self.lwCOM.currentRow()]
+        dialog = customdialog.COMDialog(constants.STATE_DIALOG_OPEN)
+        self.view_dialogs[com.name] = dialog
+        dialog.populate(com)
+        dialog.com = com
+        dialog.show()
+        self.refresh_tab_buts()
 
     def remove_gen_obj(self):
         # Removes cam, screen, or device that is selected
@@ -1217,3 +1287,20 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                 self.lwCOM.setItemSelected(item, False)
 
         self.refresh_gui()
+
+    def open_comports(self):
+        # Opens up serial ports and adds them to class list
+        for vd_name, vd in self.view_dialogs.items():
+
+            if type(vd) is customdialog.COMDialog:
+
+                new_serial = serial.Serial(port=vd.com.link,
+                                           baudrate=int(vd.com.baud_rate))
+                self.active_comports.append(new_serial)
+
+    def close_comports(self):
+        # Closes all comports in the class list
+        for comport in self.active_comports:
+            comport.close()
+
+        del self.active_comports[:]

@@ -6,7 +6,7 @@ from ui import comdialog_ui, rulesdialog_ui
 import cv2
 import PySpin
 from PyQt4 import QtGui, QtCore
-import time
+import serial.tools.list_ports
 
 
 class CamDialog(QtGui.QDialog, camdialog_ui.Ui_CamDialog):
@@ -191,10 +191,12 @@ class ScreenDialog(QtGui.QDialog, screendialog_ui.Ui_screenDialog):
 
 class COMDialog(QtGui.QDialog, comdialog_ui.Ui_COMDialog):
 
-    def __init__(self, context, parent=None):
+    def __init__(self, context, com=None, parent=None):
         super(COMDialog, self).__init__(parent)
         self.setupUi(self)
         self.context = context
+        self.com = com
+        self.rules = []
         self.setModal(True)
 
         self._set_labels()
@@ -217,17 +219,162 @@ class COMDialog(QtGui.QDialog, comdialog_ui.Ui_COMDialog):
         elif self.context == constants.STATE_DIALOG_EDIT:
             self.setWindowTitle(constants.LABEL_COM_DIALOG_TITLE_EDIT)
 
+        elif self.context == constants.STATE_DIALOG_OPEN:
+            self.setModal(False)
+
+        available_com_ports = self._get_available_com_ports()
+        for com_port in available_com_ports:
+            self.cbCOMLink.addItem(com_port.device)
+
+        self.cbCOMRules.addItem("")
+        self.cbCOMRules.addItem(constants.LABEL_RULE_DIALOG_TITLE_ADD)
+
     def _connect_signals(self):
-        pass
+        self.cbCOMRules.currentIndexChanged.connect(self._rule_clicked)
+
+    def _get_available_com_ports(self):
+        # Looks on PC for connected COM devices and returns a list of them
+        return serial.tools.list_ports.comports()
+
+    def _rule_clicked(self):
+        if self.cbCOMRules.currentText() == "":
+            return
+
+        elif self.cbCOMRules.currentText() == \
+                constants.LABEL_RULE_DIALOG_TITLE_ADD:
+            self.add_rule()
+
+        else:
+            self.edit_rule(int(self.cbCOMRules.currentText()[5:]))
+
+    def _valid_rule(self, rule):
+        if rule.time_intv == "00:00:00":
+            return False
+        return True
 
     def refresh_gui(self):
-        pass
+        self.cbCOMRules.clear()
+        self.cbCOMRules.addItem("")
+        self.cbCOMRules.addItem(constants.LABEL_RULE_DIALOG_TITLE_ADD)
+        for i in range(len(self.rules)):
+            self.cbCOMRules.addItem("Rule {}".format(i + 1))
+
+    def populate(self, com):
+
+        self.leCOMName.setText(com.name)
+        self.cbCOMLink.setCurrentIndex(self.cbCOMLink.findText(com.link))
+        self.leCOMSignal.setText(com.signal)
+        self.leCOMBaudRate.setText(str(com.baud_rate))
+        self.rules = com.rules
+
+        if self.context == constants.STATE_DIALOG_EDIT:
+            self.refresh_gui()
+
+        elif self.context == constants.STATE_DIALOG_OPEN:
+            self.leCOMName.setEnabled(False)
+            self.cbCOMLink.setEnabled(False)
+            self.leCOMSignal.setEnabled(False)
+            self.leCOMBaudRate.setEnabled(False)
+
+            self.cbCOMRules.setHidden(True)
+
+            # Show all rules in the dialog
+            for rule in self.rules:
+
+                if rule.isAt:
+                    new_label = QtGui.QLabel(
+                        "#{}:  Signal at {}:{}:{}".format(rule.num,
+                                                          rule.time_intv[0],
+                                                          rule.time_intv[1],
+                                                          rule.time_intv[2])
+                    )
+
+                elif rule.isEvery:
+                    new_label = QtGui.QLabel(
+                        "#{}:  Signal every {}:{}:{}".format(rule.num,
+                                                          rule.time_intv[0],
+                                                          rule.time_intv[1],
+                                                          rule.time_intv[2])
+                    )
+
+                self.formScreen.addRow(new_label)
+
+            status_label = QtGui.QLabel("STATUS:\tIdle")
+            status_label.setStyleSheet(
+                "color: rgb{}; font-weight: bold".format(
+                    constants.IDLE_COLOR_RGB)
+            )
+            self.formScreen.addRow(status_label)
+
+    def populate_rules(self, dialog, rule):
+        dialog.leRuleNum.setText(str(rule.num))
+        if rule.isAt:
+            dialog.rbRuleAt.click()
+            dialog.teRuleAt.setTime(
+                QtCore.QTime(
+                    int(rule.time_intv[0]),
+                    int(rule.time_intv[1]),
+                    int(rule.time_intv[2]))
+            )
+        else:
+            dialog.rbRuleEvery.click()
+            dialog.teRuleEvery.setTime(rule.time_intv)
 
     def add_rule(self):
-        pass
+        dialog = RulesDialog(constants.STATE_DIALOG_ADD)
+        dialog.leRuleNum.setText(str(len(self.rules) + 1))
 
-    def edit_rule(self):
-        pass
+        if dialog.exec_():
+            # Create a new Rule object
+            if dialog.rbRuleAt.isChecked():
+                time = dialog.teRuleAt.text()
+                is_at = True
+            else:
+                time = dialog.teRuleEvery.text()
+                is_at = False
+
+            new_rule = svdevices.Rule(
+                len(self.rules) + 1,
+                time.split(":"),
+                isAt=is_at
+            )
+            # Check that given data is valid
+            if self._valid_rule(new_rule):
+                self.rules.append(new_rule)
+
+            else:
+                self.add_rule()
+
+        self.refresh_gui()
+
+    def edit_rule(self, rule_num):
+        dialog = RulesDialog(constants.STATE_DIALOG_EDIT)
+        rule = self.rules[rule_num - 1]
+        self.rules.pop(rule_num - 1)
+        self.populate(dialog, rule)
+        if dialog.exec_():
+
+            if dialog.rbRuleAt.isChecked():
+                time = dialog.teRuleAt.text()
+                is_at = True
+            else:
+                time = dialog.teRuleEvery.text()
+                is_at = False
+
+            new_rule = svdevices.Rule(
+                rule_num,
+                time.split(":"),
+                isAt=is_at
+            )
+
+            if self._valid_rule(new_rule):
+                self.rules.insert(rule_num - 1, new_rule)
+
+            else:
+                self.rules.insert(rule_num - 1, rule)
+                self.edit_rule()
+
+        self.refresh_gui()
 
     def remove_rule(self):
         pass
@@ -250,6 +397,7 @@ class RulesDialog(QtGui.QDialog, rulesdialog_ui.Ui_rulesDialog):
         self.labelRuleNum.setText(constants.LABEL_LABEL_RULE_NUM)
         self.rbRuleAt.setText(constants.LABEL_RB_RULE_AT)
         self.rbRuleEvery.setText(constants.LABEL_RB_RULE_EVERY)
+        self.pbRuleRemove.setText(constants.LABEL_PB_RULE_REMOVE)
 
     def _set_default_gui_state(self):
         if self.context == constants.STATE_DIALOG_ADD:
