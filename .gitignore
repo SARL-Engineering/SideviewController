@@ -117,3 +117,8 @@ venv/
 build/
 distro/
 *.spec
+pyinstaller_build.txt
+
+# Build stuff
+Output/
+*.iss
