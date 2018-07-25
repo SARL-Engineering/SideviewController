@@ -195,7 +195,7 @@ class COMDialog(QtGui.QDialog, comdialog_ui.Ui_COMDialog):
         super(COMDialog, self).__init__(parent)
         self.setupUi(self)
         self.context = context
-        self.com = com
+        self.obj = com
         self.rules = []
         self.setModal(True)
 
@@ -299,12 +299,12 @@ class COMDialog(QtGui.QDialog, comdialog_ui.Ui_COMDialog):
 
                 self.formScreen.addRow(new_label)
 
-            status_label = QtGui.QLabel("STATUS:\tIdle")
-            status_label.setStyleSheet(
+            self.status_label = QtGui.QLabel("STATUS:\tIdle")
+            self.status_label.setStyleSheet(
                 "color: rgb{}; font-weight: bold".format(
                     constants.IDLE_COLOR_RGB)
             )
-            self.formScreen.addRow(status_label)
+            self.formScreen.addRow(self.status_label)
 
     def populate_rules(self, dialog, rule):
         dialog.leRuleNum.setText(str(rule.num))
