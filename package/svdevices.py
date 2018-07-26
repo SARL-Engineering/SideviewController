@@ -1,4 +1,3 @@
-# TODO: Implement generic serial comm device object
 class Camera(object):
     
     def __init__(self, name, link, resolution):

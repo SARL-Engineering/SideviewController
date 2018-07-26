@@ -1,6 +1,5 @@
 import constants
 import svdevices
-from threadworker import Worker
 from ui import camdialog_ui, screendialog_ui, viewdialog_ui
 from ui import comdialog_ui, rulesdialog_ui
 import cv2
@@ -11,11 +10,12 @@ import serial.tools.list_ports
 
 class CamDialog(QtGui.QDialog, camdialog_ui.Ui_CamDialog):
 
-    def __init__(self, context, parent=None):
+    def __init__(self, context, available_cams, parent=None):
         super(CamDialog, self).__init__(parent)
         self.setupUi(self)
         self.setModal(True)
         self.context = context
+        self.available_cams = available_cams
 
         self._set_labels()
         self._set_default_gui_state()
@@ -37,7 +37,7 @@ class CamDialog(QtGui.QDialog, camdialog_ui.Ui_CamDialog):
         elif self.context == constants.STATE_DIALOG_EDIT:
             self.setWindowTitle(constants.LABEL_CAM_DIALOG_TITLE_EDIT)
 
-        available_cams = self._get_available_cams()
+        available_cams = self.available_cams
         for cam in available_cams:
             self.cbCamLink.addItem(cam)
 
@@ -52,7 +52,7 @@ class CamDialog(QtGui.QDialog, camdialog_ui.Ui_CamDialog):
         # Queries camera indices in given range, there's apparently
         # no better way to get a list of cameras...
         cam_list = []
-        for x in range(cam_range):
+        for x in range(constants.CAM_IDX_RANGE):
             cap = cv2.VideoCapture(x)
             if cap is None or not cap.isOpened():
                 continue
@@ -284,17 +284,17 @@ class COMDialog(QtGui.QDialog, comdialog_ui.Ui_COMDialog):
                 if rule.isAt:
                     new_label = QtGui.QLabel(
                         "#{}:  Signal at {}:{}:{}".format(rule.num,
-                                                          rule.time_intv[0],
-                                                          rule.time_intv[1],
-                                                          rule.time_intv[2])
+                                                        rule.time_intv[0],
+                                                        rule.time_intv[1],
+                                                        rule.time_intv[2])
                     )
 
                 elif rule.isEvery:
                     new_label = QtGui.QLabel(
                         "#{}:  Signal every {}:{}:{}".format(rule.num,
-                                                          rule.time_intv[0],
-                                                          rule.time_intv[1],
-                                                          rule.time_intv[2])
+                                                        rule.time_intv[0],
+                                                        rule.time_intv[1],
+                                                        rule.time_intv[2])
                     )
 
                 self.formScreen.addRow(new_label)
@@ -327,10 +327,10 @@ class COMDialog(QtGui.QDialog, comdialog_ui.Ui_COMDialog):
         if dialog.exec_():
             # Create a new Rule object
             if dialog.rbRuleAt.isChecked():
-                time = dialog.teRuleAt.text()
+                time = str(dialog.teRuleAt.text())
                 is_at = True
             else:
-                time = dialog.teRuleEvery.text()
+                time = str(dialog.teRuleEvery.text())
                 is_at = False
 
             new_rule = svdevices.Rule(
@@ -374,10 +374,14 @@ class COMDialog(QtGui.QDialog, comdialog_ui.Ui_COMDialog):
                 self.rules.insert(rule_num - 1, rule)
                 self.edit_rule()
 
+        else:
+            self.rules.insert(rule_num - 1, rule)
+
         self.refresh_gui()
 
     def remove_rule(self):
         pass
+
 
 class RulesDialog(QtGui.QDialog, rulesdialog_ui.Ui_rulesDialog):
 
@@ -458,7 +462,7 @@ class ViewDialog(QtGui.QDialog, viewdialog_ui.Ui_Dialog):
 
         # Maximize in monitor, if indicated
         if (type(self.obj) is svdevices.FlatScreen or
-            type(self.obj) is svdevices.Video):
+                type(self.obj) is svdevices.Video):
 
             if self.obj.monitor != constants.LABEL_CB_MON_NUM_NA:
 
@@ -466,7 +470,9 @@ class ViewDialog(QtGui.QDialog, viewdialog_ui.Ui_Dialog):
                 desktop = QtGui.QDesktopWidget()
                 monitor = desktop.screenGeometry(mon_num)
                 self.move(monitor.left(), monitor.height())
+                self.resize(monitor.width(), monitor.height())
                 self.setWindowState(QtCore.Qt.WindowFullScreen)
+                self.move(monitor.left(), monitor.height())
 
         # Color the window if it's a flat color screen
         if type(self.obj) is svdevices.FlatScreen:

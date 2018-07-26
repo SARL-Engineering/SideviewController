@@ -122,3 +122,4 @@ pyinstaller_build.txt
 # Build stuff
 Output/
 *.iss
+dependencies/

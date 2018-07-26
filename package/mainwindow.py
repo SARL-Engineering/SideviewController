@@ -3,7 +3,6 @@ import ctypes
 import customdialog
 import cv2
 import flircam
-import frameprocessor
 import numpy as np
 import svdevices
 from threadworker import Worker
@@ -14,7 +13,6 @@ from PyQt4.phonon import Phonon
 import PySpin
 import Queue
 import serial
-import sys
 import time
 
 
@@ -29,6 +27,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         self.max_video_length = 0
         self.signal_timeline = {}
         self.active_comports = []
+        self.cam_links = []
         self.settings = None
         self.config_widgets = [self.leOutput, self.rbCRTime, self.rbCRLoops,
                                self.teCSDuration, self.spinLoops]
@@ -39,6 +38,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         self._set_icons()
         self._connect_signals()
         self._start_threadpool()
+        self._refresh_available_cams()
 
         self.refresh_gui()
         self.show()
@@ -134,6 +134,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         self.pbCamEdit.clicked.connect(self.edit_cam)
         self.pbCamRemove.clicked.connect(self.remove_gen_obj)
         self.pbCamOpen.clicked.connect(self.open_cam)
+        self.pbCamRefresh.clicked.connect(self._refresh_available_cams)
         self.pbScreenAdd.clicked.connect(self.add_screen)
         self.pbScreenEdit.clicked.connect(self.edit_screen)
         self.pbScreenOpen.clicked.connect(self.open_screen)
@@ -197,7 +198,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         # Save svdevices objects
         self.settings.setValue("cams", self.cams)
         self.settings.setValue("screens", self.screens)
-        self.settings.setValue("coms", self.coms)
+        self.settings.setValue("COMs", self.coms)
 
     def _save_as_config(self):
         # Get a location for saving and a name
@@ -205,7 +206,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         dialog.setAcceptMode(QtGui.QFileDialog.AcceptSave)
         fn = dialog.getSaveFileName(
             None,
-            "asdf",
+            constants.DIALOG_SAVE_CONFIG,
             constants.DIR_CONFIG,
             constants.FILTER_CONFIG
         )
@@ -225,7 +226,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         # Save svdevices objects
         self.settings.setValue("cams", self.cams)
         self.settings.setValue("screens", self.screens)
-        self.settings.setValue("coms", self.coms)
+        self.settings.setValue("COMs", self.coms)
 
     def _open_config(self):
         # Get config file
@@ -338,6 +339,56 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         self.actionCamera.setEnabled(True)
         self.actionVideo.setEnabled(True)
 
+    def _refresh_available_cams(self):
+
+        progbar = QtGui.QProgressDialog(self)
+        progbar.setLabel(QtGui.QLabel())
+        progbar.setWindowModality(QtCore.Qt.WindowModal)
+        progbar.setMinimum(0)
+        progbar.setMaximum(0)
+        progbar.setWindowTitle(constants.DIALOG_TITLE_REFRESH_CAMS)
+        progbar.show()
+
+        self.cam_links = []
+        for x in range(constants.CAM_IDX_RANGE):
+            cap = cv2.VideoCapture(x)
+            if cap is None or not cap.isOpened():
+                continue
+            self.cam_links.append("cam{}".format(x))
+
+        # Add FLIR cams
+        system = PySpin.System.GetInstance()
+        flir_cam_list = system.GetCameras()
+
+        for cam in flir_cam_list:
+
+            # Retrieve device ID
+            nodemap_tldevice = cam.GetTLDeviceNodeMap()
+            node_dev_info = PySpin.CCategoryPtr(nodemap_tldevice.GetNode(
+                "DeviceInformation"
+            ))
+            features = node_dev_info.GetFeatures()
+            for feature in features:
+                node_feature = PySpin.CValuePtr(feature)
+                if node_feature.GetName() == "DeviceID":
+                    self.cam_links.append(
+                        "FLIR cam {}".format(node_feature.ToString()))
+
+            del cam
+
+        flir_cam_list.Clear()
+        system.ReleaseInstance()
+        progbar.destroy()
+
+    def _is_valid_cam_links(self):
+        return True
+
+    def _is_valid_screen_links(self):
+        return True
+
+    def _is_valid_COM_links(self):
+        return True
+
     def _is_prerun_error(self):
         # Returns True if there exists some missing information before a run
         if len(self.leOutput.text()) == 0:
@@ -355,6 +406,15 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                 [type(viewd.obj) for key, viewd in self.view_dialogs.items()]:
             self.show_dialog_no_cam()
             self.tabGroup.setCurrentIndex(constants.IDX_TAB_CAM)
+            return True
+
+        elif not self._is_valid_cam_links():
+            return True
+
+        elif not self._is_valid_screen_links():
+            return True
+
+        elif not self._is_valid_COM_links():
             return True
 
         return False
@@ -911,11 +971,13 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                 self.pbCamEdit.setEnabled(False)
                 self.pbCamOpen.setEnabled(False)
                 self.pbCamRemove.setEnabled(False)
+                self.pbCamRefresh.setEnabled(False)
 
             else:
                 self.pbCamEdit.setEnabled(True)
                 self.pbCamOpen.setEnabled(True)
                 self.pbCamRemove.setEnabled(True)
+                self.pbCamRefresh.setEnabled(True)
 
         elif self.tabGroup.currentIndex() == constants.IDX_TAB_SCREEN:
             selected_item = self.lwScreen.item(
@@ -938,7 +1000,6 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
             self.pbCOMOpen.setEnabled(True)
             self.pbCOMRemove.setEnabled(True)
 
-    # TODO: Move static dialog functions to new file
     def show_dialog_no_output(self):
         # Shows dialog when user tries to run w/o output directory
         dialog = QtGui.QMessageBox()
@@ -1076,7 +1137,8 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
     # TODO: Add framerate as a field
     # TODO: Poll for resolutions that are actually available
     def add_cam(self):
-        dialog = customdialog.CamDialog(constants.STATE_DIALOG_ADD)
+        dialog = customdialog.CamDialog(constants.STATE_DIALOG_ADD,
+                                        self.cam_links)
         if dialog.exec_():
             # Create a new Camera object
             new_cam = svdevices.Camera(
@@ -1094,7 +1156,8 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         self.refresh_gui()
 
     def edit_cam(self):
-        dialog = customdialog.CamDialog(constants.STATE_DIALOG_EDIT)
+        dialog = customdialog.CamDialog(constants.STATE_DIALOG_EDIT,
+                                        self.cam_links)
         cam_pos = self.lwCam.currentRow()
         cam = self.cams[cam_pos]
         self.cams.pop(cam_pos)
@@ -1112,6 +1175,9 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
             else:
                 self.cams.insert(cam_pos, cam)
                 self.edit_cam()
+
+        else:
+            self.cams.insert(cam_pos, cam)
 
         self.refresh_gui()
 
@@ -1188,6 +1254,9 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                 self.screens.insert(screen_pos, screen)
                 self.edit_screen()
 
+        else:
+            self.screens.insert(screen_pos, screen)
+
         self.refresh_gui()
 
     # Add setting to maximize and assign to monitor
@@ -1206,7 +1275,10 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
             # Initialize Phonon multimedia objects
             media_src = Phonon.MediaSource(screen.link)
             media_obj = Phonon.MediaObject(dialog)
-            media_obj.setCurrentSource(media_src)
+
+            # Enqueue video * loops indicated by user
+            for i in range(int(self.spinLoops.text())):
+                media_obj.enqueue(media_src)
             video_widget = Phonon.VideoWidget(dialog)
             video_widget.setMinimumSize(640, 480)
             dialog.vLayout.addWidget(video_widget)
@@ -1222,7 +1294,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         if dialog.exec_():
             # Create a new Camera object
             new_com = svdevices.COMDevice(
-                dialog.leCOMName.text(),
+                str(dialog.leCOMName.text()),
                 str(dialog.cbCOMLink.currentText()),
                 str(dialog.leCOMSignal.text()),
                 int(dialog.leCOMBaudRate.text()),
@@ -1245,7 +1317,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         dialog.populate(com)
         if dialog.exec_():
             new_com = svdevices.COMDevice(
-                dialog.leCOMName.text(),
+                str(dialog.leCOMName.text()),
                 str(dialog.cbCOMLink.currentText()),
                 str(dialog.leCOMSignal.text()),
                 int(dialog.leCOMBaudRate.text()),
@@ -1258,6 +1330,9 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
             else:
                 self.coms.insert(com_pos, com)
                 self.edit_COM()
+
+        else:
+            self.coms.insert(com_pos, com)
 
         self.refresh_gui()
 

@@ -90,6 +90,7 @@ PROMPT_CONFIG_SELECT = "Select a configuration file:"
 # Dialogs
 DIALOG_TITLE_ERROR = "Error"
 DIALOG_TITLE_VW = "Video Writer"
+DIALOG_TITLE_REFRESH_CAMS = "Refreshing cameras..."
 DIALOG_MESSAGE_NO_OUTPUT = "No output folder selected."
 DIALOG_MESSAGE_NO_VIDEO = "No video selected for loop termination."
 DIALOG_MESSAGE_NO_CAM = "No camera is currently open for recording."
@@ -98,6 +99,7 @@ DIALOG_MESSAGE_BLANK_FIELDS = "All fields are required."
 DIALOG_MESSAGE_CAM_TAKEN = "The selected camera link is being used by \"{}\""
 DIALOG_OPEN_VIDEO_TITLE = "Open a Video"
 DIALOG_WRITING_VIDEO = "Writing video to file:"
+DIALOG_SAVE_CONFIG = "Save Sideview Configuration"
 
 # Overlay
 OVERLAY_IDLE = "Idle"
