@@ -42,10 +42,15 @@ class COMDevice(object):
 
 class Rule(object):
 
-    def __init__(self, num, time_intv, isAt=True):
+    def __init__(self, num, time_intv, isAt=True, intv_to=None,
+                 intv_from=None):
         super(Rule, self).__init__()
         self.num = num
         self.time_intv = time_intv
+        self.intv_to = intv_to
+        self.intv_from = intv_from
+
+        # Conditionally set type of rule
         if isAt:
             self.isAt = True
             self.isEvery = False

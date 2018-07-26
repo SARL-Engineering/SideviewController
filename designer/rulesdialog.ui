@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>367</width>
-    <height>150</height>
+    <width>481</width>
+    <height>178</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -37,13 +37,6 @@
        </property>
       </widget>
      </item>
-     <item row="2" column="0">
-      <widget class="QRadioButton" name="rbRuleEvery">
-       <property name="text">
-        <string>RadioButton</string>
-       </property>
-      </widget>
-     </item>
      <item row="1" column="1">
       <widget class="QTimeEdit" name="teRuleAt">
        <property name="displayFormat">
@@ -51,10 +44,56 @@
        </property>
       </widget>
      </item>
+     <item row="2" column="0">
+      <widget class="QRadioButton" name="rbRuleEvery">
+       <property name="text">
+        <string>RadioButton</string>
+       </property>
+      </widget>
+     </item>
      <item row="2" column="1">
       <widget class="QTimeEdit" name="teRuleEvery">
        <property name="displayFormat">
         <string>hh:mm:ss</string>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="1">
+      <layout class="QHBoxLayout" name="hlInterval">
+       <item>
+        <widget class="QLabel" name="labelHLIntervalFrom">
+         <property name="text">
+          <string>TextLabel</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QTimeEdit" name="teHLIntervalFrom">
+         <property name="displayFormat">
+          <string>hh:mm:ss</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="labelHLIntervalTo">
+         <property name="text">
+          <string>TextLabel</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QTimeEdit" name="teHLIntervalTo">
+         <property name="displayFormat">
+          <string>hh:mm:ss</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item row="3" column="0">
+      <widget class="QCheckBox" name="checkboxHLInterval">
+       <property name="text">
+        <string>CheckBox</string>
        </property>
       </widget>
      </item>

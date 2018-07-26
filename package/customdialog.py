@@ -306,6 +306,7 @@ class COMDialog(QtGui.QDialog, comdialog_ui.Ui_COMDialog):
             )
             self.formScreen.addRow(self.status_label)
 
+    # TODO: Setting time is bugged
     def populate_rules(self, dialog, rule):
         dialog.leRuleNum.setText(str(rule.num))
         if rule.isAt:
@@ -332,12 +333,21 @@ class COMDialog(QtGui.QDialog, comdialog_ui.Ui_COMDialog):
             else:
                 time = str(dialog.teRuleEvery.text())
                 is_at = False
+            if dialog.checkboxHLInterval.isChecked():
+                new_rule = svdevices.Rule(
+                    len(self.rules) + 1,
+                    time.split(":"),
+                    isAt=is_at,
+                    intv_from=str(dialog.teHLIntervalFrom.text()).split(":"),
+                    intv_to=str(dialog.teHLIntervalTo.text()).split(":")
+                )
 
-            new_rule = svdevices.Rule(
-                len(self.rules) + 1,
-                time.split(":"),
-                isAt=is_at
-            )
+            else:
+                new_rule = svdevices.Rule(
+                    len(self.rules) + 1,
+                    time.split(":"),
+                    isAt=is_at
+                )
             # Check that given data is valid
             if self._valid_rule(new_rule):
                 self.rules.append(new_rule)
@@ -351,7 +361,7 @@ class COMDialog(QtGui.QDialog, comdialog_ui.Ui_COMDialog):
         dialog = RulesDialog(constants.STATE_DIALOG_EDIT)
         rule = self.rules[rule_num - 1]
         self.rules.pop(rule_num - 1)
-        self.populate(dialog, rule)
+        self.populate_rules(dialog, rule)
         if dialog.exec_():
 
             if dialog.rbRuleAt.isChecked():
@@ -401,6 +411,10 @@ class RulesDialog(QtGui.QDialog, rulesdialog_ui.Ui_rulesDialog):
         self.labelRuleNum.setText(constants.LABEL_LABEL_RULE_NUM)
         self.rbRuleAt.setText(constants.LABEL_RB_RULE_AT)
         self.rbRuleEvery.setText(constants.LABEL_RB_RULE_EVERY)
+        self.checkboxHLInterval.setText(constants.LABEL_LABEL_RULE_INTERVAL)
+        self.labelHLIntervalFrom.setText(
+            constants.LABEL_LABEL_RULE_INTERVAL_FROM)
+        self.labelHLIntervalTo.setText(constants.LABEL_LABEL_RULE_INTERVAL_TO)
         self.pbRuleRemove.setText(constants.LABEL_PB_RULE_REMOVE)
 
     def _set_default_gui_state(self):
@@ -413,6 +427,7 @@ class RulesDialog(QtGui.QDialog, rulesdialog_ui.Ui_rulesDialog):
     def _connect_signals(self):
         self.rbRuleAt.clicked.connect(self.refresh_gui)
         self.rbRuleEvery.clicked.connect(self.refresh_gui)
+        self.checkboxHLInterval.clicked.connect(self.refresh_gui)
 
     def refresh_gui(self):
         if self.rbRuleAt.isChecked():
@@ -426,6 +441,13 @@ class RulesDialog(QtGui.QDialog, rulesdialog_ui.Ui_rulesDialog):
         else:
             self.rbRuleAt.click()
 
+        if self.checkboxHLInterval.isChecked():
+            self.teHLIntervalFrom.setEnabled(True)
+            self.teHLIntervalTo.setEnabled(True)
+
+        else:
+            self.teHLIntervalFrom.setEnabled(False)
+            self.teHLIntervalTo.setEnabled(False)
 
 class ViewDialog(QtGui.QDialog, viewdialog_ui.Ui_Dialog):
 

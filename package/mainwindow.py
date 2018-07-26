@@ -472,7 +472,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         while True:
 
             # Time calculations
-            time.sleep(0.05)
+            time.sleep(0.09)
             current_time = time.time()
             d_time = current_time - start_time
 
@@ -665,10 +665,6 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         # Retrieve GenICam nodemap
         nodemap = flir_cam.GetNodeMap()
 
-        # Set FPS
-        # flir_cam.AcquisitionFrameRate.SetValue(constants.CAM_FPS)
-        flir_images = []
-
         # Configure image events
         image_event_handler = flircam.ImageEventHandler(
             flir_cam,
@@ -759,8 +755,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                 output.write(save_frame)
 
             # Release file if recording ends
-            if recording and self.state == constants.STATE_MW_IDLE:  # \
-                # and output != None:
+            if recording and self.state == constants.STATE_MW_IDLE:
                 recording = False
                 output.release()
 
@@ -895,6 +890,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         kwargs["cb_str_passback"].emit("Done.")
 
     def closeEvent(self, event):
+        # Cleans up non-child windows before exiting the program
         self._destroy_dialogs()
         event.accept()
 
@@ -1358,7 +1354,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
             for item in self.lwScreen.selectedItems():
                 self.lwScreen.setItemSelected(item, False)
 
-        elif self.tabGroup.currentIndex() == constants.IDX_TAB_COMS:
+        elif self.tabGroup.currentIndex() == constants.IDX_TAB_COM:
             self.coms.pop(self.lwCOM.currentRow())
             for item in self.lwCOM.selectedItems():
                 self.lwCOM.setItemSelected(item, False)
