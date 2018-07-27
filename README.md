@@ -1,4 +1,6 @@
-# ![](https://github.com/SARL-Engineering/SideviewController/blob/master/icon.PNG) Sideview Controller
+# Sideview Controller
+
+![](https://github.com/SARL-Engineering/SideviewController/blob/master/icon.PNG)
 
 ## About
 Custom software for performing Sideview Unit experiments.  Only for Windows 10.  Currently, a single FLIR camera views 8 tanks adjacent to two monitors with timed triggers for LEDs and tank tapping.  Sideview Controller was written with modularity in mind, so any number of cameras, monitors, or COM devices may be set up.
