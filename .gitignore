@@ -113,13 +113,9 @@ venv.bak/
 venv/
 *.xml
 
-# PyInstaller directories
-build/
-distro/
-*.spec
-pyinstaller_build.txt
-
 # Build stuff
+build/
+dist/
+*.spec
 Output/
-*.iss
 dependencies/

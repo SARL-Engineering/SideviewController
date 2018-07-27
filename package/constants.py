@@ -1,6 +1,6 @@
 # Naming
 APP_NAME = "Sideview Controller"
-APP_VERSION = "0.1a"
+APP_VERSION = "1.0a2"
 APP_TITLE = "{}    version {}".format(APP_NAME, APP_VERSION)
 
 # Dimensions
