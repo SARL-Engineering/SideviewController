@@ -408,6 +408,8 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
             self.tabGroup.setCurrentIndex(constants.IDX_TAB_CAM)
             return True
 
+        # TODO: Implement checking of hardware and filename links to prevent
+        # fatal crashes during use
         elif not self._is_valid_cam_links():
             return True
 
@@ -635,8 +637,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                                 )
 
                 # Release file if recording ends
-                if recording and self.state == constants.STATE_MW_IDLE:#\
-                        #and output != None:
+                if recording and self.state == constants.STATE_MW_IDLE:
                     recording = False
                     end_time = time.time()
                     output_fn = "{}_SIDEVIEW_CAM_{}".format(
@@ -1105,7 +1106,25 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
                         interval = int(rule.time_intv[0])*3600 \
                                 + int(rule.time_intv[1])*60 \
                                 + int(rule.time_intv[2])
-                        for i in range(0, int(end_time + 1), interval):
+
+                        # Set intervals
+                        if rule.intv_to is None:
+                            start_intv = 0
+
+                        else:
+                            start_intv = int(rule.intv_from[0])*3600 \
+                                + int(rule.intv_from[1])*60 \
+                                + int(rule.intv_from[2])
+
+                        if rule.intv_from is None:
+                            end_intv = int(end_time) + 1
+
+                        else:
+                            end_intv = int(rule.intv_to[0])*3600 \
+                                + int(rule.intv_to[1])*60 \
+                                + int(rule.intv_to[2])
+
+                        for i in range(start_intv, end_intv, interval):
                             self.signal_timeline[i] = (vd.obj.link,
                                                        vd.obj.signal)
 
@@ -1339,6 +1358,7 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         self.view_dialogs[com.name] = dialog
         dialog.populate(com)
         dialog.obj = com
+        dialog.bbScreen.hide()
         dialog.show()
         self.refresh_tab_buts()
 

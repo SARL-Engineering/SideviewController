@@ -52,7 +52,7 @@ class CamDialog(QtGui.QDialog, camdialog_ui.Ui_CamDialog):
         # Queries camera indices in given range, there's apparently
         # no better way to get a list of cameras...
         cam_list = []
-        for x in range(constants.CAM_IDX_RANGE):
+        for x in range(cam_range):
             cap = cv2.VideoCapture(x)
             if cap is None or not cap.isOpened():
                 continue
@@ -248,8 +248,31 @@ class COMDialog(QtGui.QDialog, comdialog_ui.Ui_COMDialog):
             self.edit_rule(int(self.cbCOMRules.currentText()[5:]))
 
     def _valid_rule(self, rule):
-        if rule.time_intv == "00:00:00":
+        if int(rule.time_intv[0]) == 0 \
+                and int(rule.time_intv[1]) == 0 \
+                and int(rule.time_intv[2]) == 0:
+
+            dialog = QtGui.QMessageBox()
+            dialog.setIcon(QtGui.QMessageBox.Critical)
+            dialog.setText(constants.DIALOG_MESSAGE_NO_TIME)
+            dialog.setWindowTitle(constants.DIALOG_TITLE_ERROR)
+            dialog.setStandardButtons(QtGui.QMessageBox.Ok)
+            dialog.exec_()
             return False
+
+        # Make sure the interval makes sense if it's been selected
+        elif rule.intv_from is not None and rule.intv_to is not None\
+                and sum([int(x) for x in rule.intv_from]) \
+                >= sum([int(y) for y in rule.intv_to]):
+
+            dialog = QtGui.QMessageBox()
+            dialog.setIcon(QtGui.QMessageBox.Critical)
+            dialog.setText(constants.DIALOG_MESSAGE_BAD_INT)
+            dialog.setWindowTitle(constants.DIALOG_TITLE_ERROR)
+            dialog.setStandardButtons(QtGui.QMessageBox.Ok)
+            dialog.exec_()
+            return False
+
         return True
 
     def refresh_gui(self):
