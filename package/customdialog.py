@@ -9,6 +9,12 @@ import serial.tools.list_ports
 
 
 class CamDialog(QtGui.QDialog, camdialog_ui.Ui_CamDialog):
+    """Custom dialog for creating and editing Camera objects
+
+    Attributes:
+        context: A flag indicating whether creating or editing
+        available_cams: A list of links to all currently available cameras
+    """
 
     def __init__(self, context, available_cams, parent=None):
         super(CamDialog, self).__init__(parent)
@@ -93,6 +99,11 @@ class CamDialog(QtGui.QDialog, camdialog_ui.Ui_CamDialog):
 
 
 class ScreenDialog(QtGui.QDialog, screendialog_ui.Ui_screenDialog):
+    """Custom dialog for creating and editing Screen objects
+
+    Attributes:
+        context: A flag indicating whether creating or editing
+    """
 
     def __init__(self, context, parent=None):
         super(ScreenDialog, self).__init__(parent)
@@ -190,6 +201,13 @@ class ScreenDialog(QtGui.QDialog, screendialog_ui.Ui_screenDialog):
 
 
 class COMDialog(QtGui.QDialog, comdialog_ui.Ui_COMDialog):
+    """Custom dialog for creating and editing COM objects
+
+    Attributes:
+        context: A flag indicating whether creating or editing
+        obj: COM object that populates the dialog
+        rules: A list of Rule objects
+    """
 
     def __init__(self, context, com=None, parent=None):
         super(COMDialog, self).__init__(parent)
@@ -417,6 +435,11 @@ class COMDialog(QtGui.QDialog, comdialog_ui.Ui_COMDialog):
 
 
 class RulesDialog(QtGui.QDialog, rulesdialog_ui.Ui_rulesDialog):
+    """Custom dialog for creating and editing Rule objects
+
+    Attributes:
+        context: A flag indicating whether creating or editing
+    """
 
     def __init__(self, context, parent=None):
         super(RulesDialog, self).__init__(parent)
@@ -473,6 +496,13 @@ class RulesDialog(QtGui.QDialog, rulesdialog_ui.Ui_rulesDialog):
             self.teHLIntervalTo.setEnabled(False)
 
 class ViewDialog(QtGui.QDialog, viewdialog_ui.Ui_Dialog):
+    """Custom dialog for creating and editing Camera objects
+
+    Attributes:
+        obj: Camera or Screen object that will be viewed
+        update_vd_dict: Passed in function that helps garbage collection of
+            GUI elements
+    """
 
     def __init__(self, obj, vd_dict_func, parent=None):
         super(ViewDialog, self).__init__(parent)

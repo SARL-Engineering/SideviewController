@@ -17,13 +17,33 @@ import time
 
 
 class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
+    """Top-level Singleton class operating the majority of the program
+
+    Operates as an interface to operating cameras and video playback as well
+    as serial communication.  Threads will get created to handle devices
+    being operated and added to a ThreadPool which automatically
+    does garbage collection and queuing.
+
+    Attributes:
+        cams, screens, coms: Lists of the respective objects
+        view_dialogs: A dictionary of currently open ViewDialog objects
+            {object_name : object}
+        max_video_length: The length of the longest video, used for timing
+        signal_timeline: A dictionary of durations, in seconds, indicating
+            when signals will be sent.
+            [time_in_secs : (comport_name, signal)]
+        active_comports: A list of serial COM ports that are open for
+            writing signals
+        cam_links: A list of links to cameras, used to reduce rate of
+            refreshing/polling for cameras
+        config_widgets:
+    """
 
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
         self.setupUi(self)
         self.cams, self.screens, self.coms = [], [], []
         self.view_dialogs = {}
-        self.video_queue = Queue.Queue()
         self.max_video_length = 0
         self.signal_timeline = {}
         self.active_comports = []
@@ -340,7 +360,8 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         self.actionVideo.setEnabled(True)
 
     def _refresh_available_cams(self):
-
+        # Polls for cameras available to the computer, including FLIR
+        # cameras.
         progbar = QtGui.QProgressDialog(self)
         progbar.setLabel(QtGui.QLabel())
         progbar.setWindowModality(QtCore.Qt.WindowModal)
@@ -864,32 +885,6 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
             self.vw_dialog_pb.setMaximum(1)
             self.vw_dialog_pb.setValue(1)
 
-    def _write_videos(self, **kwargs):
-        # Writes videos at the end of the recording process
-        while not self.video_queue.empty():
-
-            # Get a FrameWriter
-            fwriter = self.video_queue.get()
-
-            # Update prog bar
-            kwargs["cb_str_passback"].emit(
-                "{} {}".format(
-                    constants.DIALOG_WRITING_VIDEO,
-                    fwriter.fn
-                )
-            )
-            print(fwriter.output.isOpened())
-
-            for image in fwriter.images:
-                if self.vw_dialog_pb.wasCanceled():
-                    return
-                fwriter.output.write(image)
-
-            # Free output VideoWriter object
-            fwriter.output.release()
-
-        kwargs["cb_str_passback"].emit("Done.")
-
     def closeEvent(self, event):
         # Cleans up non-child windows before exiting the program
         self._destroy_dialogs()
@@ -1089,12 +1084,14 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         elif self.rbCRLoops.isChecked():
             end_time = int(self.spinLoops.value()) * self.max_video_length
 
+        # Iterate through view dialogs to get the COMDialogs
         for vd_name, vd in self.view_dialogs.items():
 
             if type(vd) is customdialog.COMDialog:
 
                 for rule in vd.obj.rules:
 
+                    # Convert rule time into a single integer
                     if rule.isAt:
                         secs = int(rule.time_intv[0])*3600 \
                                 + int(rule.time_intv[1])*60 \
@@ -1134,20 +1131,6 @@ class MainWindow(QtGui.QMainWindow, mainwindow_ui.Ui_MainWindow):
         worker.signals.int_passback.connect(self._update_progbar)
         worker.signals.str_passback.connect(self._update_timer)
         self.threadpool.start(worker)
-
-    def save_videos(self):
-        # After recording, creates a thread to save the recorded frames
-        if not self.video_queue.empty():
-            self.vw_dialog_pb = QtGui.QProgressDialog(self)
-            self.vw_dialog_pb.setLabel(QtGui.QLabel())
-            self.vw_dialog_pb.setWindowModality(QtCore.Qt.WindowModal)
-            self.vw_dialog_pb.setMinimum(0)
-            self.vw_dialog_pb.setMaximum(0)
-            self.vw_dialog_pb.setWindowTitle(constants.DIALOG_TITLE_VW)
-            self.vw_dialog_pb.show()
-            worker = Worker(self._write_videos)
-            worker.signals.str_passback.connect(self._update_vw_dialog_pb)
-            self.threadpool.start(worker)
 
     # TODO: Add framerate as a field
     # TODO: Poll for resolutions that are actually available
